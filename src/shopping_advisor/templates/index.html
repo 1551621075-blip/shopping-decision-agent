@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>本地购物决策助手 · 合成笔记本</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body data-ready="false">
+  <header>
+    <p class="eyebrow">本地 · 可核对 · 不下单</p>
+    <h1>购物决策助手</h1>
+    <p id="mode-banner" class="mode">待登录核对模式 · TEST 脚本不代表真实模型验收</p>
+    <p>只比较原创合成笔记本。价格、库存、性能和续航均为演示数据，不是实时行情或真实测评。</p>
+  </header>
+  <main>
+    <section id="login-panel" class="panel">
+      <h2>临时身份登录</h2>
+      <form id="login-form" autocomplete="off">
+        <label for="token">本实例身份令牌</label>
+        <input id="token" type="password" autocomplete="off" spellcheck="false" required maxlength="128">
+        <button id="login" type="submit">登录</button>
+      </form>
+      <p>令牌只保存在当前页面内存；刷新后需重新登录。不要把令牌放进网址。Alice / Bob 相互隔离，operator 仅维护合成目录和对账。</p>
+    </section>
+    <section id="identity-panel" class="panel" hidden>
+      <span id="identity"></span>
+      <button id="logout" type="button">退出并清除页面身份</button>
+      <button id="refresh" type="button">只读刷新</button>
+    </section>
+    <div id="status" role="status" aria-live="polite"></div>
+    <section id="retry-panel" class="warning" hidden>
+      <p>上次提交结果尚不明确。表单已保留；请重试完全相同的请求，不要新建另一笔操作。</p>
+      <button id="retry-action" type="button">用原 action_id 重试</button>
+    </section>
+    <section id="customer-panel" hidden>
+      <div class="panel session-toolbar">
+        <label for="session-list">我的会话（编号不代表时间顺序）</label>
+        <select id="session-list"><option value="">请选择会话</option></select>
+        <button id="new-session" type="button">创建新会话</button>
+        <p id="session-status">尚未选择会话</p>
+        <p>本会话模型调用数：<span id="model-calls">0</span>（只读轮询不会增加调用）</p>
+        <button id="cancel-run" type="button" disabled>取消当前轮次</button>
+        <p class="hint">取消不追回已经发送的模型请求或用量。未知调用需 operator 核对，不能自动重试。</p>
+      </div>
+      <div class="columns">
+        <section class="panel">
+          <h2>对话</h2>
+          <div id="messages" aria-live="polite"></div>
+          <form id="message-form">
+            <label for="message-text">告诉助手你的预算与用途</label>
+            <textarea id="message-text" maxlength="2000" rows="4" required placeholder="例如：预算6000元，日常办公，更看重价格"></textarea>
+            <button id="send-message" type="submit">发送，启动新一轮模型</button>
+          </form>
+          <p class="hint">确认偏好后不会自动调用模型，请另发消息继续查询。聊天中的“好的”不算确认。</p>
+        </section>
+        <section class="panel">
+          <h2>已确认偏好 · 完整显式提交</h2>
+          <p id="preferences-status">尚未确认；以下是可编辑的表单初值，不会自动生效。</p>
+          <form id="preferences-form">
+            <label for="budget-yuan">总预算（元，含运费；最多两位小数）</label>
+            <input id="budget-yuan" name="budget" type="text" inputmode="decimal" value="6000.00" required>
+            <label for="use">主要用途</label>
+            <select id="use"><option value="office">办公</option><option value="coding">编程</option><option value="creative">创作</option><option value="gaming">游戏</option></select>
+            <label for="priority">排序偏好（不放宽硬条件）</label>
+            <select id="priority"><option value="value">价格 / 性价比</option><option value="performance">性能</option><option value="portability">便携</option><option value="battery">续航</option></select>
+            <label for="min-ram-gb">最低内存（GB）</label>
+            <input id="min-ram-gb" type="number" min="4" max="128" step="1" value="8" required>
+            <label for="min-storage-gb">最低存储（GB）</label>
+            <input id="min-storage-gb" type="number" min="128" max="8192" step="1" value="256" required>
+            <label for="max-weight-g">最大重量（克，留空明确表示不限）</label>
+            <input id="max-weight-g" type="number" min="500" max="5000" step="1">
+            <label for="min-battery-minutes">最低合成续航指标（分钟，留空明确表示不限）</label>
+            <input id="min-battery-minutes" type="number" min="30" max="1440" step="1">
+            <label class="checkbox"><input id="needs-discrete-gpu" type="checkbox"> 必须有独立显卡</label>
+            <label for="os">操作系统硬要求</label>
+            <select id="os"><option value="any">不限</option><option value="windows">Windows</option><option value="linux">Linux</option><option value="macos">macOS</option></select>
+            <button id="save-preferences" type="submit">确认并保存全部偏好（不启动模型）</button>
+          </form>
+          <button id="reload-preferences" type="button">放弃未提交偏好，重新加载最新已确认偏好</button>
+          <p class="hint">修改会使旧查询和推荐失效。轮询不会覆盖输入或自动改变编辑基准；版本冲突后先明确重新加载，再编辑提交。</p>
+        </section>
+      </div>
+      <section class="panel"><h2>模型偏好草案与历史</h2><div id="proposals"></div></section>
+      <section class="panel"><h2>查询与比较证据（含历史）</h2><div id="evidences"></div></section>
+      <section class="panel"><h2>后端确定性评估（含历史）</h2><div id="evaluations"></div></section>
+      <section class="panel"><h2>推荐、事实与取舍（含历史）</h2><div id="recommendations"></div></section>
+    </section>
+    <section id="operator-panel" hidden>
+      <section class="panel"><h2>合成目录维护</h2><p>仅修改合成价格和库存；更新会使客户旧证据失效，不能冒充真实行情。</p><div id="catalog"></div></section>
+      <section class="panel"><h2>未知用量对账</h2><p>依据本地记录填写确切 token 数与依据；未知不能用 0 代替。对账不重放旧动作、不自动继续客户轮次。</p><div id="unknown-calls"></div></section>
+    </section>
+  </main>
+  <footer>只辅助比较，不下单、不支付，不承诺全市场最优。TEST 与真实本地模型验收分开记录。</footer>
+</body>
+</html>
